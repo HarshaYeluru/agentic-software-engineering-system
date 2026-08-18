@@ -209,3 +209,20 @@ git push -u origin main
 ```
 
 Do not commit `.venv`, `generated`, `work`, or local SQLite files. The included `.gitignore` already handles these.
+
+## Next steps
+
+### Real repository patching
+This system generates and validates artifacts, but it does not yet apply real code changes to an existing repository in a controlled patch workflow.
+
+### Persistent run history and resume
+Runs are saved as snapshots, but the project does not yet provide a full lifecycle of historical runs, retries, or resume flows for interrupted work.
+
+### Stronger brownfield analysis
+The repository scan is useful for a demo, but it is still heuristic-based and could be improved with deeper dependency and impact analysis.
+
+### Polished scenario outputs
+The project includes scenario examples, but the greenfield, brownfield, and ambiguous examples are not yet formalized as separate polished deliverables.
+
+### Risk-policy enforcement
+The system has an approval gate, but it still needs richer risk policies to restrict destructive or high-impact autonomous actions.
