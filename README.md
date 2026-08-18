@@ -35,12 +35,6 @@ git clone https://github.com/<your-github-username>/agentic-software-engineering
 Set-Location agentic-software-engineering-system
 ```
 
-### Option B: use the local project folder
-
-```powershell
-Set-Location "C:\Users\USER\Documents\Codex\2026-08-14\i"
-```
-
 ## Set up Python
 
 Create and activate a virtual environment, then install the project in editable mode:
