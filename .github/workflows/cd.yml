@@ -1,0 +1,38 @@
+name: CD
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types:
+      - completed
+  workflow_dispatch:
+
+jobs:
+  release-smoke:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install project dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e .
+
+      - name: Create demo release artifact
+        run: python -m agentic_system.cli --clean --requirement "Release smoke test for agentic workflow" --approve
+
+      - name: Upload generated app artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: agentic-system-generated-app
+          path: generated/
+          if-no-files-found: error

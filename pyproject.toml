@@ -5,12 +5,16 @@ description = "A controlled multi-step workflow for engineering requirements"
 requires-python = ">=3.11"
 dependencies = [
   "fastapi>=0.115,<1.0",
+  "httpx>=0.27,<1.0",
   "uvicorn[standard]>=0.30,<1.0",
 ]
 
 [build-system]
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["agentic_system*", "url_shortener*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

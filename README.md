@@ -54,13 +54,23 @@ If your PowerShell policy prevents activation, use the virtual-environment inter
 
 ## Verify the installation
 
-Run the complete test suite:
+Install the project and run the complete test suite:
 
 ```powershell
+python -m pip install -e .
 python -m unittest discover -s tests -v
 ```
 
 Expected result: all tests pass.
+
+## GitHub Actions CI/CD
+
+This repository includes GitHub Actions workflows for continuous integration and release-style validation:
+
+- `.github/workflows/ci.yml` runs on pushes and pull requests, installs the package, and executes the full unit test suite.
+- `.github/workflows/cd.yml` runs after a successful CI pass (or via manual dispatch) to create a runtime smoke-test artifact from the generated workflow output.
+
+The workflows are configured for Python 3.11 and target the same commands used in local validation so the GitHub pipeline matches the developer experience.
 
 ## Run the engineering workflow
 
