@@ -1,13 +1,12 @@
 # Code ownership for required-review routing.
-# Replace @<your-github-username> with your actual GitHub handle once this repo has a remote.
 # https://docs.github.com/articles/about-code-owners
 
 # Default owner for everything not covered below.
-*                               @<your-github-username>
+*                               @HarshaYeluru
 
 # Orchestration and decision logic get the most scrutiny (see CONTRIBUTING.md).
-agentic_system/orchestrator.py  @<your-github-username>
-agentic_system/agents.py        @<your-github-username>
+agentic_system/orchestrator.py  @HarshaYeluru
+agentic_system/agents.py        @HarshaYeluru
 
 # CI/CD pipeline changes.
-.github/workflows/              @<your-github-username>
+.github/workflows/              @HarshaYeluru

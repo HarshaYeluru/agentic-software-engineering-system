@@ -33,12 +33,10 @@ No database server or API key is required for the local demo.
 
 ## Get the project from scratch
 
-### Option A: clone it from GitHub
-
-After you create and push a remote repository, replace the placeholder URL with yours:
+### Clone it from GitHub
 
 ```powershell
-git clone https://github.com/<your-github-username>/agentic-software-engineering-system.git
+git clone https://github.com/HarshaYeluru/agentic-software-engineering-system.git
 Set-Location agentic-software-engineering-system
 ```
 
@@ -247,24 +245,6 @@ data/                 Local SQLite database (ignored by Git)
 ## Design boundaries and next steps
 
 SQLite is used only to keep the example zero-setup. For production, the architecture proposes PostgreSQL for links, Redis for cache-aside redirects, and asynchronous analytics processing — see [docs/architecture.md#high-availability-and-failover](docs/architecture.md#high-availability-and-failover) for how that maps to an HA, multi-region deployment. The next assignment milestone is an LLM-backed agent implementation (see [Next steps](#next-steps) below); brownfield repository analysis and three polished scenario reports are already implemented.
-
-## Create the first commit and push to GitHub
-
-If this folder is not yet committed, run:
-
-```powershell
-git add .
-git commit -m "Initial agentic engineering prototype"
-```
-
-Create an empty repository on GitHub, then connect and push it:
-
-```powershell
-git remote add origin https://github.com/<your-github-username>/agentic-software-engineering-system.git
-git push -u origin main
-```
-
-Do not commit `.venv`, `generated`, `work`, or local SQLite files. The included `.gitignore` already handles these.
 
 ## Next steps
 
