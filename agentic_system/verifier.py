@@ -45,4 +45,25 @@ def verify_generated_application(output_directory: Path) -> dict[str, Any]:
         if completed.returncode != 0:
             findings.append(f"{name} check failed with exit code {completed.returncode}.")
 
+    cicd_check = _verify_cicd_workflows(application_directory)
+    checks.append(cicd_check)
+    if not cicd_check["passed"]:
+        findings.append("cicd workflow files are missing or malformed.")
+
     return {"passed": not findings, "checks": checks, "findings": findings}
+
+
+def _verify_cicd_workflows(application_directory: Path) -> dict[str, Any]:
+    """Confirm the generated deploy pipeline files exist and look structurally sane."""
+    ci_path = application_directory / ".github" / "workflows" / "ci.yml"
+    cd_path = application_directory / ".github" / "workflows" / "cd.yml"
+    missing = [str(path) for path in (ci_path, cd_path) if not path.is_file()]
+    if missing:
+        return {"name": "cicd_workflows", "passed": False, "output": f"missing: {', '.join(missing)}"}
+
+    valid = "jobs:" in ci_path.read_text(encoding="utf-8") and "jobs:" in cd_path.read_text(encoding="utf-8")
+    return {
+        "name": "cicd_workflows",
+        "passed": valid,
+        "output": "ci.yml and cd.yml present" if valid else "workflow files are missing a jobs section",
+    }

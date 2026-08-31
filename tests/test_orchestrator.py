@@ -36,6 +36,23 @@ class WorkflowOrchestratorTests(unittest.TestCase):
             self.assertIn("impact_score", analysis)
             self.assertIn("risk_level", analysis)
 
+    def test_run_materializes_a_deploy_pipeline_alongside_the_application(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            output_directory = Path(temporary_directory)
+            result = WorkflowOrchestrator(approved=True).run(
+                "Build a scalable URL shortener service with APIs, persistence, and analytics.",
+                output_directory=output_directory,
+            )
+
+            engineering_artifacts = result.artifacts["engineering_artifacts"]
+            self.assertIn("cicd_pipeline", engineering_artifacts)
+            self.assertTrue(engineering_artifacts["generated_cicd_pipeline"]["generated"])
+
+            application_directory = output_directory / "apps" / "url_shortener"
+            self.assertTrue((application_directory / ".github" / "workflows" / "ci.yml").is_file())
+            self.assertTrue((application_directory / ".github" / "workflows" / "cd.yml").is_file())
+            self.assertTrue((application_directory / "Dockerfile").is_file())
+
     def test_run_history_and_scenario_outputs_are_created(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             output_directory = Path(temporary_directory)
