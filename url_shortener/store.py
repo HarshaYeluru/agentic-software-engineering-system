@@ -59,6 +59,15 @@ class LinkStore:
                 "INSERT INTO click_events(code, occurred_at) VALUES (?, ?)", (code, self._now())
             )
 
+    def ping(self) -> bool:
+        """Cheap connectivity check used by the readiness probe."""
+        try:
+            with closing(self._connect()) as connection:
+                connection.execute("SELECT 1")
+            return True
+        except sqlite3.Error:
+            return False
+
     def analytics(self, code: str) -> int | None:
         with closing(self._connect()) as connection:
             link = connection.execute("SELECT 1 FROM links WHERE code = ?", (code,)).fetchone()

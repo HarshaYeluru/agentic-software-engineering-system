@@ -13,9 +13,15 @@ It also includes a URL-shortener service that acts as the mandatory greenfield e
 - Scenario outputs for greenfield, brownfield, and ambiguous requirements.
 - A sandbox patch preview model that records the intended file changes without writing to a real repository.
 - A FastAPI URL-shortener service with SQLite storage, redirects, expiry handling, and click analytics.
-- A generated deploy pipeline (GitHub Actions CI/CD workflows and a Dockerfile) for the generated application, recomputed on every run from the requirement's risk and classification. See [CI/CD for the generated software](#cicd-for-the-generated-software).
+- Observability built into that service: structured JSON request logs, request-correlation IDs, and a Prometheus `/metrics` endpoint, plus separate liveness (`/health`) and readiness (`/ready`) checks. See [Observability](#observability).
+- A generated deploy pipeline (GitHub Actions CI/CD workflows and a Dockerfile) for the generated application, recomputed on every run from the requirement's risk and classification, including lint/security-scan quality gates. See [CI/CD for the generated software](#cicd-for-the-generated-software).
+- Security and quality gates on the agent tool's own pipeline too: `ruff` (lint), `bandit` (SAST), and `pip-audit` (dependency vulnerabilities) run in CI on every push and PR.
 - Unit and API tests.
-- A compact architecture note: [docs/architecture.md](docs/architecture.md).
+- An architecture note with a control-flow diagram and an HA/failover section: [docs/architecture.md](docs/architecture.md).
+- Three polished scenario write-ups (greenfield, brownfield, ambiguous) with real captured output: [docs/scenarios/](docs/scenarios/).
+- A testing-approach doc covering all five validation layers and their known limitations: [docs/testing-approach.md](docs/testing-approach.md).
+- An operational runbook and RCA template for the generated service: [docs/runbook.md](docs/runbook.md).
+- A documented branching strategy and PR process: [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Prerequisites
 
@@ -55,23 +61,29 @@ If your PowerShell policy prevents activation, use the virtual-environment inter
 
 ## Verify the installation
 
-Install the project and run the complete test suite:
+Install the project (including the dev/lint/security tooling) and run the complete test suite:
 
 ```powershell
-python -m pip install -e .
+python -m pip install -e ".[dev]"
 python -m unittest discover -s tests -v
 ```
 
-Expected result: all tests pass.
+Expected result: all tests pass. To run the same quality and security gates CI runs:
+
+```powershell
+ruff check .
+bandit -q -r agentic_system url_shortener
+pip-audit
+```
 
 ## GitHub Actions CI/CD
 
 This repository includes GitHub Actions workflows for continuous integration and release-style validation of the **agent tool itself**:
 
-- `.github/workflows/ci.yml` runs on pushes and pull requests, installs the package, and executes the full unit test suite.
+- `.github/workflows/ci.yml` runs on pushes and pull requests: installs the package with dev extras, lints with `ruff`, runs a security scan with `bandit`, audits dependencies with `pip-audit`, runs the full unit test suite, and finally smoke-tests the CLI end to end.
 - `.github/workflows/cd.yml` runs after a successful CI pass (or via manual dispatch) to create a runtime smoke-test artifact from the generated workflow output.
 
-The workflows are configured for Python 3.11 and target the same commands used in local validation so the GitHub pipeline matches the developer experience.
+The workflows are configured for Python 3.11 and target the same commands used in local validation so the GitHub pipeline matches the developer experience. See [CONTRIBUTING.md](CONTRIBUTING.md) for the branching strategy and PR process these gates support.
 
 ## CI/CD for the generated software
 
@@ -145,13 +157,13 @@ The scan ignores common dependency/build directories, inspects at most 250 sourc
 
 ### Scenario outputs
 
-The workflow now includes explicit scenario examples for common review cases:
+The workflow includes explicit scenario examples for common review cases, both as a short in-payload summary (`agents.generate_scenarios()`, included in every `run.json`) and as full write-ups with real captured output:
 
-- greenfield: a fresh service build
-- brownfield: an enhancement to an existing system
-- ambiguous: a vague requirement that pauses for human approval
+- [docs/scenarios/greenfield.md](docs/scenarios/greenfield.md) — a fresh service build
+- [docs/scenarios/brownfield.md](docs/scenarios/brownfield.md) — an enhancement to an existing system, with a real repository scan
+- [docs/scenarios/ambiguous.md](docs/scenarios/ambiguous.md) — a vague requirement that pauses for human approval
 
-These are included in the run artifact payload and can be inspected alongside the workflow trace.
+Each write-up shows the task decomposition, the orchestration trace, and the validation result for that run.
 
 ### Local review UI
 
@@ -199,10 +211,25 @@ Visit `$link.short_url` in a browser to record a redirect event, then run the an
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| `GET` | `/health` | Simple service health check |
+| `GET` | `/health` | Liveness check — process is up, no dependency checks |
+| `GET` | `/ready` | Readiness check — process is up *and* the database is reachable |
+| `GET` | `/metrics` | Prometheus metrics (requests, latency histogram, links created, redirects) |
 | `POST` | `/v1/links` | Create a short link |
 | `GET` | `/{code}` | Redirect and record a click |
 | `GET` | `/v1/links/{code}/analytics` | Return total recorded clicks |
+
+## Observability
+
+Every response carries an `X-Request-ID` header, and every request is logged as one JSON line to stdout. Check it locally:
+
+```powershell
+python -m uvicorn url_shortener.app:app --reload
+# in another window
+Invoke-RestMethod http://127.0.0.1:8000/ready
+Invoke-RestMethod http://127.0.0.1:8000/metrics
+```
+
+See [docs/architecture.md#observability](docs/architecture.md#observability) for what each signal is for and [docs/runbook.md](docs/runbook.md) for how they're used during an incident.
 
 ## Project layout
 
@@ -210,14 +237,16 @@ Visit `$link.short_url` in a browser to record a redirect event, then run the an
 agentic_system/       Workflow coordinator and deterministic agent functions
 url_shortener/        FastAPI reference implementation and SQLite store
 tests/                Workflow and API tests
-docs/                 Architecture and design notes
+docs/                 Architecture, HA/observability notes, runbook, and scenario write-ups
+.github/              CI/CD workflows, PR template, CODEOWNERS
+CONTRIBUTING.md       Branching strategy and PR process
 generated/            Local workflow output (ignored by Git)
 data/                 Local SQLite database (ignored by Git)
 ```
 
 ## Design boundaries and next steps
 
-SQLite is used only to keep the example zero-setup. For production, the architecture proposes PostgreSQL for links, Redis for cache-aside redirects, and asynchronous analytics processing. The next assignment milestones are brownfield repository analysis, an LLM-backed agent implementation, and three polished scenario reports (greenfield, brownfield, and ambiguous).
+SQLite is used only to keep the example zero-setup. For production, the architecture proposes PostgreSQL for links, Redis for cache-aside redirects, and asynchronous analytics processing — see [docs/architecture.md#high-availability-and-failover](docs/architecture.md#high-availability-and-failover) for how that maps to an HA, multi-region deployment. The next assignment milestone is an LLM-backed agent implementation (see [Next steps](#next-steps) below); brownfield repository analysis and three polished scenario reports are already implemented.
 
 ## Create the first commit and push to GitHub
 
@@ -248,8 +277,8 @@ Runs are saved as snapshots, but the project does not yet provide a full lifecyc
 ### Stronger brownfield analysis
 The repository scan is useful for a demo, but it is still heuristic-based and could be improved with deeper dependency and impact analysis.
 
-### Polished scenario outputs
-The project includes scenario examples, but the greenfield, brownfield, and ambiguous examples are not yet formalized as separate polished deliverables.
+### Prompt-engineered agent functions
+`agentic_system.agents` is deterministic by design, for reviewability. The orchestration boundary (`orchestrator.py` calling `agents.*` functions with a fixed signature) is kept separate from the decision logic specifically so an LLM-backed implementation of `normalize_requirement`/`analyze_codebase`/`generate_engineering_artifacts` can be swapped in later without touching the orchestrator.
 
 ### Risk-policy enforcement
 The system has an approval gate, but it still needs richer risk policies to restrict destructive or high-impact autonomous actions.
