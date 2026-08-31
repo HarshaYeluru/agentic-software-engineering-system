@@ -4,7 +4,6 @@ import shutil
 from pathlib import Path
 from typing import Any
 
-
 GENERATED_APP_MARKER = ".agentic-generated-app"
 REFERENCE_APPLICATION = Path(__file__).resolve().parent.parent / "url_shortener"
 REFERENCE_TEST = Path(__file__).resolve().parent.parent / "tests" / "test_url_shortener.py"
@@ -12,7 +11,7 @@ REFERENCE_TEST = Path(__file__).resolve().parent.parent / "tests" / "test_url_sh
 _DOCKERFILE_TEMPLATE = """FROM python:3.11-slim
 WORKDIR /app
 COPY . /app/url_shortener
-RUN pip install --no-cache-dir "fastapi>=0.115,<1.0" "uvicorn[standard]>=0.30,<1.0"
+RUN pip install --no-cache-dir "fastapi>=0.115,<1.0" "uvicorn[standard]>=0.30,<1.0" "prometheus-client>=0.20,<1.0"
 EXPOSE 8000
 CMD ["uvicorn", "url_shortener.app:app", "--app-dir", "/app", "--host", "0.0.0.0", "--port", "8000"]
 """
@@ -20,7 +19,11 @@ CMD ["uvicorn", "url_shortener.app:app", "--app-dir", "/app", "--host", "0.0.0.0
 _CI_STEP_LIBRARY: dict[str, tuple[str, list[str]]] = {
     "install_dependencies": (
         "Install project dependencies",
-        ["python -m pip install --upgrade pip", "python -m pip install -e ."],
+        ["python -m pip install --upgrade pip", "python -m pip install -e \".[dev]\""],
+    ),
+    "lint_and_security_scan": (
+        "Lint and security scan (ruff, bandit)",
+        ["ruff check .", "bandit -q -r url_shortener"],
     ),
     "run_api_tests": ("Run url_shortener API tests", ["python -m unittest tests.test_url_shortener -v"]),
     "run_full_regression": ("Run full regression suite", ["python -m unittest discover -s tests -v"]),

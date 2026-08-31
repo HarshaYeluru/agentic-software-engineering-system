@@ -62,8 +62,13 @@ class WorkflowOrchestrator:
             "summary": lambda: self._summary(artifacts),
         }
         artifact_names = {
-            "normalize": "normalized_requirement", "codebase_analysis": "codebase_analysis", "plan": "execution_plan", "architecture": "architecture",
-            "implementation": "engineering_artifacts", "validation": "validation", "summary": "engineering_summary",
+            "normalize": "normalized_requirement",
+            "codebase_analysis": "codebase_analysis",
+            "plan": "execution_plan",
+            "architecture": "architecture",
+            "implementation": "engineering_artifacts",
+            "validation": "validation",
+            "summary": "engineering_summary",
         }
 
         while True:

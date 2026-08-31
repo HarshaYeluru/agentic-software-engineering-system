@@ -7,6 +7,14 @@ dependencies = [
   "fastapi>=0.115,<1.0",
   "httpx>=0.27,<1.0",
   "uvicorn[standard]>=0.30,<1.0",
+  "prometheus-client>=0.20,<1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "ruff>=0.6,<1.0",
+  "bandit>=1.7,<2.0",
+  "pip-audit>=2.7,<3.0",
 ]
 
 [build-system]
@@ -18,3 +26,19 @@ include = ["agentic_system*", "url_shortener*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 140
+target-version = "py311"
+exclude = ["generated"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
+
+[tool.ruff.lint.per-file-ignores]
+# review_app.py embeds a single-page HTML/CSS/JS template as a Python string; its
+# long lines are markup, not Python line-length debt.
+"agentic_system/review_app.py" = ["E501"]
+
+[tool.bandit]
+exclude_dirs = ["tests", "generated", ".venv"]

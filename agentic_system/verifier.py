@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-import subprocess
+import subprocess  # nosec B404 - fixed, hardcoded command list below; no untrusted input reaches this module
 import sys
 from pathlib import Path
 from typing import Any
@@ -26,7 +26,7 @@ def verify_generated_application(output_directory: Path) -> dict[str, Any]:
 
     for name, command in commands:
         try:
-            completed = subprocess.run(
+            completed = subprocess.run(  # nosec B603 - command is one of the two fixed lists above, not user input
                 command,
                 cwd=application_directory.parent,
                 env=environment,

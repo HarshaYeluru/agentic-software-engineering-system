@@ -3,7 +3,6 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-
 URL_SHORTENER_SCOPE = ["Create short links", "Resolve a short link", "Record click analytics"]
 REQUIRED_ARTIFACTS = {"api_contract", "implementation_plan", "test_cases", "documentation", "cicd_pipeline"}
 
@@ -209,7 +208,7 @@ def generate_cicd_pipeline(normalized: dict[str, Any]) -> dict[str, Any]:
     is_brownfield = normalized.get("classification") == "brownfield"
     is_high_risk = normalized.get("risk_level", 0.0) >= 0.5
 
-    ci_steps = ["install_dependencies", "run_api_tests"]
+    ci_steps = ["install_dependencies", "lint_and_security_scan", "run_api_tests"]
     if is_brownfield:
         ci_steps.append("run_full_regression")
     if is_high_risk:

@@ -2,6 +2,7 @@
 __pycache__/
 *.py[cod]
 *.txt
+*.egg-info/
 generated/
 work/
 data/*.sqlite3
