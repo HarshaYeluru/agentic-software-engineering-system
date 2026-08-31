@@ -13,6 +13,7 @@ It also includes a URL-shortener service that acts as the mandatory greenfield e
 - Scenario outputs for greenfield, brownfield, and ambiguous requirements.
 - A sandbox patch preview model that records the intended file changes without writing to a real repository.
 - A FastAPI URL-shortener service with SQLite storage, redirects, expiry handling, and click analytics.
+- A generated deploy pipeline (GitHub Actions CI/CD workflows and a Dockerfile) for the generated application, recomputed on every run from the requirement's risk and classification. See [CI/CD for the generated software](#cicd-for-the-generated-software).
 - Unit and API tests.
 - A compact architecture note: [docs/architecture.md](docs/architecture.md).
 
@@ -65,12 +66,34 @@ Expected result: all tests pass.
 
 ## GitHub Actions CI/CD
 
-This repository includes GitHub Actions workflows for continuous integration and release-style validation:
+This repository includes GitHub Actions workflows for continuous integration and release-style validation of the **agent tool itself**:
 
 - `.github/workflows/ci.yml` runs on pushes and pull requests, installs the package, and executes the full unit test suite.
 - `.github/workflows/cd.yml` runs after a successful CI pass (or via manual dispatch) to create a runtime smoke-test artifact from the generated workflow output.
 
 The workflows are configured for Python 3.11 and target the same commands used in local validation so the GitHub pipeline matches the developer experience.
+
+## CI/CD for the generated software
+
+Separately from the workflows above, the engineering workflow also produces a deploy pipeline **for the software it generates**, as one of the implementation artifacts (alongside the API contract, implementation plan, and test cases). Every run writes:
+
+- `generated/apps/url_shortener/.github/workflows/ci.yml` — installs the app and runs its test suite; on a brownfield change it adds a full regression pass, and on a high-risk change it adds a dependency security audit.
+- `generated/apps/url_shortener/.github/workflows/cd.yml` — builds a Docker image and pushes it to a container registry; on a high-risk change it gates the job behind a `production` environment and a manual-approval step.
+- `generated/apps/url_shortener/Dockerfile` — a runnable image for the generated app.
+
+This pipeline definition is recomputed from the current requirement's risk level and greenfield/brownfield classification on every run, rather than hand-maintained, so it stays in sync with the software as it changes. The `cicd_pipeline` artifact in `generated/run.json` records the rationale for what was included; validation (`generated/run.json` → `validation.checks`) confirms the workflow files exist and are structurally valid before the run is marked complete.
+
+To see it react to risk, compare two runs:
+
+```powershell
+python -m agentic_system.cli --requirement "Build a scalable URL shortener service with APIs, persistence, and analytics." --approve
+Get-Content generated\apps\url_shortener\.github\workflows\cd.yml
+
+python -m agentic_system.cli --requirement "Delete all production data and migrate the URL shortener security model." --approve
+Get-Content generated\apps\url_shortener\.github\workflows\cd.yml
+```
+
+The second run adds a dependency audit step to CI and a manual-approval gate to CD; a subsequent low-risk run removes them again.
 
 ## Run the engineering workflow
 
