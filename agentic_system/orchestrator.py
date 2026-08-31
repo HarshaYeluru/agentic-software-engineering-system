@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from . import agents
-from .materializer import materialize_url_shortener
+from .materializer import materialize_cicd_workflows, materialize_url_shortener
 from .models import EngineeringTask, RunResult, TaskState
 from .verifier import verify_generated_application
 
@@ -15,7 +15,13 @@ def _build_sandbox_patch_preview(normalized_requirement: dict[str, Any]) -> dict
     return {
         "mode": "preview",
         "allowed": True,
-        "files": ["url_shortener/app.py", "url_shortener/store.py", "tests/test_url_shortener.py"],
+        "files": [
+            "url_shortener/app.py",
+            "url_shortener/store.py",
+            "tests/test_url_shortener.py",
+            ".github/workflows/ci.yml",
+            ".github/workflows/cd.yml",
+        ],
         "summary": f"Planned change for: {normalized_requirement.get('intent', 'engineering change')}",
     }
 
@@ -106,6 +112,9 @@ class WorkflowOrchestrator:
         artifacts["sandbox_patch_preview"] = _build_sandbox_patch_preview(normalized_requirement)
         if output_directory is not None and "api_contract" in artifacts:
             artifacts["generated_application"] = materialize_url_shortener(output_directory)
+            artifacts["generated_cicd_pipeline"] = materialize_cicd_workflows(
+                output_directory, artifacts["cicd_pipeline"]
+            )
         return artifacts
 
     @staticmethod
@@ -118,8 +127,11 @@ class WorkflowOrchestrator:
         repair: dict[str, Any] = {"attempted": False}
         if not application_validation["passed"]:
             # A deterministic prototype can retry by rematerializing its known-good template.
-            repair = {"attempted": True, "action": "rematerialized reference application"}
+            repair = {"attempted": True, "action": "rematerialized reference application and cicd pipeline"}
             artifacts["engineering_artifacts"]["generated_application"] = materialize_url_shortener(output_directory)
+            artifacts["engineering_artifacts"]["generated_cicd_pipeline"] = materialize_cicd_workflows(
+                output_directory, artifacts["engineering_artifacts"]["cicd_pipeline"]
+            )
             application_validation = verify_generated_application(output_directory)
             repair["passed_after_retry"] = application_validation["passed"]
 

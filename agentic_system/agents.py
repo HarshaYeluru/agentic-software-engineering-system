@@ -5,7 +5,7 @@ from typing import Any
 
 
 URL_SHORTENER_SCOPE = ["Create short links", "Resolve a short link", "Record click analytics"]
-REQUIRED_ARTIFACTS = {"api_contract", "implementation_plan", "test_cases", "documentation"}
+REQUIRED_ARTIFACTS = {"api_contract", "implementation_plan", "test_cases", "documentation", "cicd_pipeline"}
 
 
 def normalize_requirement(requirement: str, repository_path: Path | None = None) -> dict[str, Any]:
@@ -191,6 +191,50 @@ def generate_engineering_artifacts(normalized: dict[str, Any]) -> dict[str, Any]
             "Verify redirect response and analytics event publication.",
         ],
         "documentation": "API uses 201 for link creation and 302 for redirects. Analytics are eventually consistent.",
+        "cicd_pipeline": generate_cicd_pipeline(normalized),
+    }
+
+
+def generate_cicd_pipeline(normalized: dict[str, Any]) -> dict[str, Any]:
+    """Propose a deploy pipeline for the generated application.
+
+    Recomputed from the current requirement on every run (classification, risk,
+    scope) instead of being hand-maintained, so the pipeline definition tracks
+    whatever the software looks like after this prompt rather than drifting
+    from it over successive requirements.
+    """
+    if normalized["functional_scope"] != URL_SHORTENER_SCOPE:
+        return {"note": "CI/CD pipeline withheld pending clarified scope."}
+
+    is_brownfield = normalized.get("classification") == "brownfield"
+    is_high_risk = normalized.get("risk_level", 0.0) >= 0.5
+
+    ci_steps = ["install_dependencies", "run_api_tests"]
+    if is_brownfield:
+        ci_steps.append("run_full_regression")
+    if is_high_risk:
+        ci_steps.append("run_dependency_audit")
+
+    cd_steps = ["build_image", "push_image"]
+    if is_high_risk:
+        cd_steps.insert(0, "require_manual_approval")
+
+    return {
+        "ci_pipeline": {
+            "name": "URL Shortener CI",
+            "trigger_paths": ["url_shortener/**", "tests/test_url_shortener.py"],
+            "steps": ci_steps,
+        },
+        "cd_pipeline": {
+            "name": "URL Shortener CD",
+            "steps": cd_steps,
+            "deploy_target": "container_registry (ghcr.io)",
+        },
+        "rationale": (
+            f"classification={normalized.get('classification')}, "
+            f"risk_level={normalized.get('risk_level', 0.0)}; "
+            "regenerated for this requirement rather than hand-maintained."
+        ),
     }
 
 
