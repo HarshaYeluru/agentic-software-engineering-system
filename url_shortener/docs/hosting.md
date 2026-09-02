@@ -1,11 +1,11 @@
 # Hosting the generated app: a practical guide
 
-You have a working URL shortener (`url_shortener/`, or a copy of it materialized into `generated/apps/url_shortener/`, or patched directly into your own repository by `agentic_system.patcher` — see the [README](../README.md#everyday-commands)). This is the "now what" doc: how to actually put it somewhere reachable, safely, without guessing.
+You have a working URL shortener (`url_shortener/`, or a copy of it materialized into `generated/apps/url_shortener/`, or patched directly into your own repository by `agentic_system.patcher` — see the [README](../../README.md#everyday-commands)). This is the "now what" doc: how to actually put it somewhere reachable, safely, without guessing.
 
 ## What you already have
 
 - A `Dockerfile` (generated alongside the app — see `agentic_system.materializer.render_cicd_files`) that builds a runnable image.
-- A CD pipeline (`.github/workflows/cd.yml` inside the generated app) that already builds that image and pushes it to `ghcr.io` on every successful CI run — see [CI/CD for the generated software](../README.md#github-actions-cicd).
+- A CD pipeline (`.github/workflows/cd.yml` inside the generated app) that already builds that image and pushes it to `ghcr.io` on every successful CI run — see [CI/CD for the generated software](../../README.md#github-actions-cicd).
 - Health endpoints built for exactly this purpose: `GET /health` (liveness) and `GET /ready` (readiness, checks the database) — see [Observability](architecture.md#observability).
 
 So the image-building half of "deploy this" is already automated. What's left is: where does that image actually run, and what does it talk to.
@@ -51,7 +51,7 @@ Render is the pick here because it's the least setup for what you have: it deplo
 
 1. **Confirm the image builds and lands in GHCR.** This already happens automatically — push to `main`, let `ci.yml` pass, let `cd.yml` build and push. Confirm by checking the Packages tab on the GitHub repo.
 2. **Create a managed Postgres instance** on your chosen platform. Note the connection string — you'll pass it in as an environment variable, never bake it into the image or commit it.
-3. **Create a Redis instance** (same platform, or a separate provider like Upstash) for the cache-aside redirect lookup described in [docs/architecture.md](architecture.md#url-shortener-deployment-path).
+3. **Create a Redis instance** (same platform, or a separate provider like Upstash) for the cache-aside redirect lookup described in [architecture.md](architecture.md#deployment-path).
 4. **Create the web service**, pointing it at the GHCR image (`ghcr.io/<owner>/<repo>-url-shortener:latest` or a specific tag/SHA for a reproducible deploy — prefer the SHA tag in production so "what's running" is never ambiguous).
 5. **Set environment variables** for the database and cache connection strings, and anything else the Postgres-backed store needs. Never put secrets in the Dockerfile or in git — every platform above has a secrets/env-var UI for exactly this.
 6. **Point the health checks at the right paths.** Configure the platform's liveness check against `/health` and readiness/startup check against `/ready` — this is precisely why those two are separate endpoints: liveness restarts a hung process, readiness controls whether traffic is routed to it at all (see [Observability](architecture.md#observability) for why that distinction matters).
@@ -62,7 +62,7 @@ Render is the pick here because it's the least setup for what you have: it deplo
 
 ## If you just want it running today, imperfectly
 
-A single always-on instance with a persistent disk volume (most platforms offer this) keeps SQLite working without the Postgres migration — you lose horizontal scaling and true HA, but you get something real and reachable fast. Be explicit with anyone using it that this is a single point of failure, and treat the Postgres swap as the very next thing to do, not a someday item — [docs/architecture.md](architecture.md#high-availability-and-failover) already documents why.
+A single always-on instance with a persistent disk volume (most platforms offer this) keeps SQLite working without the Postgres migration — you lose horizontal scaling and true HA, but you get something real and reachable fast. Be explicit with anyone using it that this is a single point of failure, and treat the Postgres swap as the very next thing to do, not a someday item — [architecture.md](architecture.md#high-availability-and-failover) already documents why.
 
 ## Cost shape, not exact numbers
 

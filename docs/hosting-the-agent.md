@@ -1,6 +1,6 @@
 # Hosting the agent itself
 
-The default way to use `agentic_system` is local: clone, `pip install`, run the CLI or the local review UI. This doc is for a different question — what would it take to run the *agent* as a shared, always-on service, so a team calls it instead of everyone running it on their own machine. It's the counterpart to [hosting-the-generated-app.md](hosting-the-generated-app.md), which is about hosting the *software the agent builds*, not the agent.
+The default way to use `agentic_system` is local: clone, `pip install`, run the CLI or the local review UI. This doc is for a different question — what would it take to run the *agent* as a shared, always-on service, so a team calls it instead of everyone running it on their own machine. It's the counterpart to [../url_shortener/docs/hosting.md](../url_shortener/docs/hosting.md), which is about hosting the *software the agent builds*, not the agent.
 
 ## Why this is a different problem than hosting the generated app
 
@@ -46,7 +46,7 @@ flowchart TB
 
 ## Packaging
 
-`agentic_system.review_app` is already a FastAPI app — the same Dockerfile pattern used for `url_shortener` (see [hosting-the-generated-app.md](hosting-the-generated-app.md)) applies directly: install the package, `CMD ["uvicorn", "agentic_system.review_app:app", "--host", "0.0.0.0", "--port", "8001"]`. The CLI path (`agentic_system.cli`) can run the same image as a one-off container invocation (e.g. a CI step: `docker run <image> python -m agentic_system.cli --requirement "..." --approve`) rather than needing its own separate packaging.
+`agentic_system.review_app` is already a FastAPI app — the same Dockerfile pattern used for `url_shortener` (see [../url_shortener/docs/hosting.md](../url_shortener/docs/hosting.md)) applies directly: install the package, `CMD ["uvicorn", "agentic_system.review_app:app", "--host", "0.0.0.0", "--port", "8001"]`. The CLI path (`agentic_system.cli`) can run the same image as a one-off container invocation (e.g. a CI step: `docker run <image> python -m agentic_system.cli --requirement "..." --approve`) rather than needing its own separate packaging.
 
 ## What has to change from the local design, and why
 
@@ -58,7 +58,7 @@ flowchart TB
 
 ## Observability: the piece the generated app has that the agent doesn't yet
 
-The generated `url_shortener` service has `/metrics`, structured JSON logs, and correlation IDs (see [Observability](architecture.md#observability)) — the agent's own orchestrator does not, today. Hosting the agent is the forcing function to add that, and it should track things specific to the agent's job, not reuse the web-service metric names verbatim:
+The generated `url_shortener` service has `/metrics`, structured JSON logs, and correlation IDs (see [Observability](../url_shortener/docs/architecture.md#observability)) — the agent's own orchestrator does not, today. Hosting the agent is the forcing function to add that, and it should track things specific to the agent's job, not reuse the web-service metric names verbatim:
 
 - `agent_runs_total{status}` — completed / awaiting_approval / failed, so you can see approval-gate friction and failure rate over time, not just per-run.
 - `agent_run_duration_seconds` — a histogram, per task (`normalize`, `codebase_analysis`, `architecture`, `implementation`, `validation`), so a regression in one stage is visible instead of only "the whole run got slower."
@@ -67,4 +67,4 @@ The generated `url_shortener` service has `/metrics`, structured JSON logs, and 
 
 ## CI/CD for the agent service itself
 
-This reuses the same pattern already built for the agent's own tool pipeline (`.github/workflows/ci.yml` / `cd.yml` — see the [README](../README.md#github-actions-cicd)), extended with an actual deploy step at the end of `cd.yml`: build the image, push it to a registry, then deploy to whichever platform hosts it (the same platform menu as [hosting-the-generated-app.md](hosting-the-generated-app.md) applies — Render/Fly/Railway/ECS all support "deploy this image" as a CD step). The existing CI quality gates (`ruff`, `bandit`, `pip-audit`) matter more here than for the generated app, precisely because this service is the one with repository-write and LLM-call capabilities — a dependency vulnerability or a lint-masked bug here has a larger blast radius than one in the demo app it produces.
+This reuses the same pattern already built for the agent's own tool pipeline (`.github/workflows/ci.yml` / `cd.yml` — see the [README](../README.md#github-actions-cicd)), extended with an actual deploy step at the end of `cd.yml`: build the image, push it to a registry, then deploy to whichever platform hosts it (the same platform menu as [../url_shortener/docs/hosting.md](../url_shortener/docs/hosting.md) applies — Render/Fly/Railway/ECS all support "deploy this image" as a CD step). The existing CI quality gates (`ruff`, `bandit`, `pip-audit`) matter more here than for the generated app, precisely because this service is the one with repository-write and LLM-call capabilities — a dependency vulnerability or a lint-masked bug here has a larger blast radius than one in the demo app it produces.

@@ -82,6 +82,7 @@ Every run with `--repository-path` computes a diff preview and saves it to `gene
 **Let it interpret the requirement with an LLM instead of keyword rules:**
 
 ```powershell
+python -m pip install -e ".[llm]"
 $env:ANTHROPIC_API_KEY = "sk-..."
 python -m agentic_system.cli --requirement "Add expiry support to the existing URL shortener" --use-llm --approve
 ```
@@ -122,7 +123,7 @@ Visit `$link.short_url` in a browser to record a click, then check analytics aga
 | `GET` | `/{code}` | Redirect and record a click |
 | `GET` | `/v1/links/{code}/analytics` | Total recorded clicks |
 
-Every response carries an `X-Request-ID` header, and every request is logged as one JSON line — see [Observability](docs/architecture.md#observability) for what each signal is for and [docs/runbook.md](docs/runbook.md) for how they're used during an incident.
+Every response carries an `X-Request-ID` header, and every request is logged as one JSON line — see [Observability](url_shortener/docs/architecture.md#observability) for what each signal is for and [url_shortener/docs/runbook.md](url_shortener/docs/runbook.md) for how they're used during an incident.
 
 ## What's inside
 
@@ -135,17 +136,18 @@ Every response carries an `X-Request-ID` header, and every request is logged as 
 - **Its own CI/CD**, with lint (`ruff`), security scanning (`bandit`), and dependency auditing (`pip-audit`) on every push.
 - **Observability** in the generated service: structured logs, correlation IDs, Prometheus metrics, separate liveness/readiness checks.
 
-Each of those is covered in depth in its own doc rather than crammed in here:
+Each of those is covered in depth in its own doc rather than crammed in here. Docs live next to what they describe: agent docs in `docs/`, docs about the generated app in `url_shortener/docs/`.
 
 | Doc | What's in it |
 | --- | --- |
-| [docs/architecture.md](docs/architecture.md) | Control-flow diagram, separation of responsibilities, observability, HA/failover design |
+| [docs/architecture.md](docs/architecture.md) | The agent's control-flow diagram, separation of responsibilities, and write guardrails |
 | [docs/scenarios/](docs/scenarios/) | Three real, captured runs: greenfield, brownfield, ambiguous |
 | [docs/testing-approach.md](docs/testing-approach.md) | The five validation layers this project has, and their known limitations |
-| [docs/runbook.md](docs/runbook.md) | On-call playbook and RCA template for the generated service |
 | [docs/hosting-the-agent.md](docs/hosting-the-agent.md) | Architecture for running the agent itself as a shared, hosted service |
-| [docs/hosting-the-generated-app.md](docs/hosting-the-generated-app.md) | A practical, step-by-step guide to actually hosting the generated URL shortener |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Branching strategy and PR process |
+| [url_shortener/docs/architecture.md](url_shortener/docs/architecture.md) | The generated app's deployment path, observability, and HA/failover design |
+| [url_shortener/docs/runbook.md](url_shortener/docs/runbook.md) | On-call playbook and RCA template for the generated service |
+| [url_shortener/docs/hosting.md](url_shortener/docs/hosting.md) | A practical, step-by-step guide to actually hosting the generated URL shortener |
 
 ## GitHub Actions CI/CD
 
@@ -173,19 +175,20 @@ Two separate pipelines exist, for two separate things:
 ## Project layout
 
 ```text
-agentic_system/    Workflow coordinator and deterministic agent functions
-url_shortener/     FastAPI reference implementation and SQLite store
-tests/             Workflow and API tests
-docs/              Architecture, HA/observability notes, runbook, and scenario write-ups
-.github/           CI/CD workflows, PR template, CODEOWNERS
-CONTRIBUTING.md    Branching strategy and PR process
-generated/         Local workflow output (ignored by Git)
-data/              Local SQLite database (ignored by Git)
+agentic_system/       Workflow coordinator and deterministic agent functions
+url_shortener/        FastAPI reference implementation and SQLite store
+url_shortener/docs/   Docs about the generated app: architecture, hosting, runbook
+tests/                Workflow and API tests
+docs/                 Docs about the agent: architecture, testing approach, scenarios, hosting
+.github/              CI/CD workflows, PR template, CODEOWNERS
+CONTRIBUTING.md       Branching strategy and PR process
+generated/            Local workflow output (ignored by Git)
+data/                 Local SQLite database (ignored by Git)
 ```
 
 ## Design boundaries and what's next
 
-SQLite keeps the local demo zero-setup. The production target is PostgreSQL for links, Redis for cache-aside redirects, and asynchronous analytics — see [HA and failover](docs/architecture.md#high-availability-and-failover) for how that maps to a multi-region deployment.
+SQLite keeps the local demo zero-setup. The production target is PostgreSQL for links, Redis for cache-aside redirects, and asynchronous analytics — see [HA and failover](url_shortener/docs/architecture.md#high-availability-and-failover) for how that maps to a multi-region deployment.
 
 Known gaps, stated rather than hidden:
 
