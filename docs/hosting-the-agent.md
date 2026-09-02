@@ -14,33 +14,33 @@ The generated URL shortener is a normal stateless web service — the hosting pl
 ```mermaid
 flowchart TB
     subgraph Clients
-        CLI[CLI users]
-        UI[review_app UI]
-        CI[A CI pipeline calling the agent as a step]
+        CLI["CLI users"]
+        UI["review_app UI"]
+        CI["A CI pipeline calling the agent as a step"]
     end
 
     CLI -->|HTTPS| GW
     UI -->|HTTPS| GW
-    CI -->|HTTPS + service token| GW
+    CI -->|"HTTPS + service token"| GW
 
-    GW[API gateway / load balancer\nauthn + rate limiting]
+    GW["API gateway / load balancer<br/>authn + rate limiting"]
 
     subgraph Runtime["Agent service (stateless, horizontally scalable)"]
-        GW --> A1[Orchestrator worker 1]
-        GW --> A2[Orchestrator worker 2+]
+        GW --> A1["Orchestrator worker 1"]
+        GW --> A2["Orchestrator worker 2+"]
     end
 
-    A1 --> Store[(Run history store\nS3/GCS or a database table,\nnot local disk)]
+    A1 --> Store[("Run history store<br/>S3/GCS or a database table,<br/>not local disk")]
     A2 --> Store
 
-    A1 -. "optional: --use-llm" .-> LLM[Anthropic API]
+    A1 -. "optional: --use-llm" .-> LLM["Anthropic API"]
     A2 -. "optional: --use-llm" .-> LLM
 
-    A1 -. "optional: patch apply" .-> Git[Scoped Git credentials\n(GitHub App installation token,\nnever a broad personal PAT)]
+    A1 -. "optional: patch apply" .-> Git["Scoped Git credentials<br/>GitHub App installation token,<br/>never a broad personal PAT"]
     A2 -. "optional: patch apply" .-> Git
-    Git --> Repo[(Target repository)]
+    Git --> Repo[("Target repository")]
 
-    A1 -. "GET /metrics, JSON logs" .-> Obs[Prometheus/Grafana + log sink]
+    A1 -. "GET /metrics, JSON logs" .-> Obs["Prometheus/Grafana + log sink"]
     A2 -. "GET /metrics, JSON logs" .-> Obs
 ```
 

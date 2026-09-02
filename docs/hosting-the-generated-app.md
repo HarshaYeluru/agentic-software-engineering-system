@@ -19,28 +19,28 @@ So the image-building half of "deploy this" is already automated. What's left is
 ```mermaid
 flowchart TB
     subgraph Internet
-        User[Browser / API client]
+        User["Browser / API client"]
     end
 
-    User -->|HTTPS| DNS[DNS + managed TLS]
-    DNS --> LB[Platform load balancer]
+    User -->|HTTPS| DNS["DNS + managed TLS"]
+    DNS --> LB["Platform load balancer"]
 
     subgraph Host["Hosting platform (Render / Fly.io / Railway / ECS Fargate — pick one)"]
         LB --> App1["url_shortener container (replica 1)"]
         LB --> App2["url_shortener container (replica 2+)"]
     end
 
-    App1 --> PG[(Managed PostgreSQL\nlinks table)]
+    App1 --> PG[("Managed PostgreSQL<br/>links table")]
     App2 --> PG
-    App1 --> Redis[(Managed Redis\ncache-aside for redirects)]
+    App1 --> Redis[("Managed Redis<br/>cache-aside for redirects")]
     App2 --> Redis
 
-    App1 -. "GET /metrics" .-> Prom[Prometheus / Grafana Cloud]
+    App1 -. "GET /metrics" .-> Prom["Prometheus / Grafana Cloud"]
     App2 -. "GET /metrics" .-> Prom
-    App1 -. "JSON logs" .-> Logs[Log sink: platform logs / Loki / ELK]
+    App1 -. "JSON logs" .-> Logs["Log sink: platform logs / Loki / ELK"]
     App2 -. "JSON logs" .-> Logs
 
-    Registry[(ghcr.io image\nfrom cd.yml)] -.->|pulled by| Host
+    Registry[("ghcr.io image<br/>from cd.yml")] -.->|"pulled by"| Host
 ```
 
 Nothing here is exotic — it's the smallest shape that gets you real availability (2+ replicas), a real health check the platform actually uses (`/ready`), and the observability you already built somewhere it's actually collected.
