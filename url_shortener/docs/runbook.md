@@ -5,7 +5,7 @@ An on-call playbook for the generated service, plus the RCA template used after 
 ## Service map
 
 - **Process**: FastAPI app, single stateless process (`url_shortener.app:app`).
-- **Dependency**: SQLite file (`data/url_shortener.sqlite3` locally; Postgres in the production target — see [architecture.md](architecture.md#url-shortener-deployment-path)).
+- **Dependency**: SQLite file (`data/url_shortener.sqlite3` locally; Postgres in the production target — see [architecture.md](architecture.md#deployment-path)).
 - **Health surface**: `GET /health` (liveness — process is scheduling requests), `GET /ready` (readiness — process **and** database are reachable).
 - **Metrics surface**: `GET /metrics` — `url_shortener_requests_total{method,path,status}`, `url_shortener_request_duration_seconds` (histogram), `url_shortener_links_created_total`, `url_shortener_redirects_total{result}`.
 - **Logs**: one JSON line per request to stdout — `request_id`, `method`, `path`, `status`, `duration_ms`. `X-Request-ID` is echoed on every response, so a report from a user ("my redirect didn't work") can be traced to one exact log line if they capture that header.
