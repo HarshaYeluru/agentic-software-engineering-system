@@ -54,6 +54,36 @@ def generated_application_directory(output_directory: Path) -> Path:
     return output_directory / "apps" / "url_shortener"
 
 
+def reference_application_files() -> dict[str, str]:
+    """The url_shortener reference implementation's contents, keyed by the relative
+    path they occupy in a real target repository (``url_shortener/app.py``, not the
+    ``generated/`` sandbox layout ``materialize_url_shortener`` writes to).
+
+    Used by ``agentic_system.patcher`` to apply the same reference implementation
+    to an existing repository, bounded to exactly these paths.
+    """
+    files = {
+        f"url_shortener/{name}": (REFERENCE_APPLICATION / name).read_text(encoding="utf-8")
+        for name in ("__init__.py", "app.py", "store.py")
+    }
+    files["tests/test_url_shortener.py"] = REFERENCE_TEST.read_text(encoding="utf-8")
+    return files
+
+
+def render_cicd_files(cicd_pipeline: dict[str, Any]) -> dict[str, str]:
+    """The CI/CD workflow and Dockerfile contents, keyed by their relative path in a
+    real target repository. Empty if the pipeline artifact has no ci/cd_pipeline yet
+    (scope not clarified) — same guard ``materialize_cicd_workflows`` uses.
+    """
+    if "ci_pipeline" not in cicd_pipeline or "cd_pipeline" not in cicd_pipeline:
+        return {}
+    return {
+        ".github/workflows/ci.yml": _render_ci_workflow(cicd_pipeline["ci_pipeline"]),
+        ".github/workflows/cd.yml": _render_cd_workflow(cicd_pipeline["cd_pipeline"]),
+        "Dockerfile": _DOCKERFILE_TEMPLATE,
+    }
+
+
 def materialize_url_shortener(output_directory: Path) -> dict[str, object]:
     """Create a runnable application artifact from the checked-in reference template.
 

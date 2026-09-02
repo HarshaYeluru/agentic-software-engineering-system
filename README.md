@@ -10,7 +10,7 @@ Give it one sentence describing a software requirement, and it works through the
 1. Understand  — figures out what's being asked, and what's unclear about it
 2. Plan        — an ordered checklist of the work, each step gated on the last
 3. Design      — picks the architecture and explains why
-4. ⏸ Approve   — stops here. A human must say "go ahead" before anything is built
+4. Approve   — stops here. A human must say "go ahead" before anything is built
                  (anything that looks risky needs an even more deliberate approval)
 5. Build       — writes the code, the tests, and the documentation
 6. Verify      — runs it, tests it, and auto-repairs if something's broken
@@ -69,7 +69,24 @@ The second, riskier requirement adds a dependency-security-audit step to CI and 
 python -m agentic_system.cli --requirement "Add expiry support to the existing URL shortener" --repository-path "C:\path\to\existing-repository" --approve
 ```
 
-A bounded, read-only scan (at most 250 files) reports which files look relevant and how risky the change is. It never writes to the target repository. Write-up: [docs/scenarios/brownfield.md](docs/scenarios/brownfield.md).
+A bounded, read-only scan (at most 250 files) reports which files look relevant and how risky the change is. This alone never writes to the target repository — add `--apply-to-repository` (below) to actually change it. Write-up: [docs/scenarios/brownfield.md](docs/scenarios/brownfield.md).
+
+**Let it actually write to a repository, safely:**
+
+```powershell
+python -m agentic_system.cli --requirement "Build a scalable URL shortener service with APIs, persistence, and analytics." --repository-path "C:\path\to\some-repo" --approve --apply-to-repository
+```
+
+Every run with `--repository-path` computes a diff preview and saves it to `generated/patches/latest.json`, whether or not you apply it. `--apply-to-repository` writes only that exact, previewed file set — nothing broader — and backs up anything it overwrites first, so it's always reversible with `agentic_system.patcher.rollback_patch`. Try it against an empty temp folder to see it materialize a real, independently-runnable copy of the service.
+
+**Let it interpret the requirement with an LLM instead of keyword rules:**
+
+```powershell
+$env:ANTHROPIC_API_KEY = "sk-..."
+python -m agentic_system.cli --requirement "Add expiry support to the existing URL shortener" --use-llm --approve
+```
+
+`--use-llm` routes requirement interpretation through Claude instead of the deterministic rules — but only the interpretive fields (intent, ambiguities, assumptions, clarification questions, risk level). Anything that gates real behavior (`approval_required`) is always recomputed by the same trusted rule, never taken from the model, and any failure (no key, network error, malformed response) falls back to the deterministic result automatically. See `agentic_system/prompted_agents.py` for the prompt and the validation logic.
 
 **Use a browser instead of the command line:**
 
@@ -111,8 +128,9 @@ Every response carries an `X-Request-ID` header, and every request is logged as 
 
 - **A controlled, dependency-aware workflow** with an explicit human-approval gate and risk-based escalation — the JSON trace in `generated/run.json` makes every decision inspectable.
 - **Brownfield repository analysis** — a read-only impact scan against an existing codebase.
+- **Real repository patching** — a bounded diff preview plus an explicit, backed-up, reversible apply step (`agentic_system.patcher`), gated separately from plan approval.
+- **Optional LLM-backed requirement understanding** (`--use-llm`) — with every safety-critical field validated or recomputed, never trusted blindly from the model, and a deterministic fallback on any failure.
 - **Persisted run history** under `generated/history/latest.json`, so runs stay reviewable and comparable.
-- **A sandbox patch preview** — records the files a real change would touch, without writing to a real repository.
 - **A generated deploy pipeline** (GitHub Actions + a Dockerfile) for whatever it builds, regenerated every run from the requirement's risk level.
 - **Its own CI/CD**, with lint (`ruff`), security scanning (`bandit`), and dependency auditing (`pip-audit`) on every push.
 - **Observability** in the generated service: structured logs, correlation IDs, Prometheus metrics, separate liveness/readiness checks.
@@ -125,6 +143,8 @@ Each of those is covered in depth in its own doc rather than crammed in here:
 | [docs/scenarios/](docs/scenarios/) | Three real, captured runs: greenfield, brownfield, ambiguous |
 | [docs/testing-approach.md](docs/testing-approach.md) | The five validation layers this project has, and their known limitations |
 | [docs/runbook.md](docs/runbook.md) | On-call playbook and RCA template for the generated service |
+| [docs/hosting-the-agent.md](docs/hosting-the-agent.md) | Architecture for running the agent itself as a shared, hosted service |
+| [docs/hosting-the-generated-app.md](docs/hosting-the-generated-app.md) | A practical, step-by-step guide to actually hosting the generated URL shortener |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Branching strategy and PR process |
 
 ## GitHub Actions CI/CD
@@ -140,7 +160,9 @@ Two separate pipelines exist, for two separate things:
 | --- | --- |
 | Run a requirement | `python -m agentic_system.cli --requirement "..." --approve` |
 | Run without approving (see the gate) | `python -m agentic_system.cli --requirement "..."` |
-| Scan an existing repo | add `--repository-path "C:\path\to\repo"` |
+| Scan an existing repo (preview only) | add `--repository-path "C:\path\to\repo"` |
+| Actually write to that repo | add `--apply-to-repository` (requires `--approve` + `--repository-path`) |
+| Use an LLM to interpret the requirement | add `--use-llm` (needs `ANTHROPIC_API_KEY`; falls back safely without it) |
 | Reset local demo state | `python -m agentic_system.cli --clean` |
 | Clean, then run fresh | add `--clean` to any run command |
 | Run the test suite | `python -m unittest discover -s tests -v` |
@@ -167,8 +189,8 @@ SQLite keeps the local demo zero-setup. The production target is PostgreSQL for 
 
 Known gaps, stated rather than hidden:
 
-- **No real repository patching** — the workflow generates and validates artifacts but doesn't yet apply changes to an existing repository through a controlled patch flow.
+- **Repository patching only knows one implementation.** `agentic_system.patcher` genuinely writes to a real repository, with a diff preview, an explicit apply gate, and backup/rollback — but the content it writes is still the one reference URL-shortener implementation, not arbitrary generated code for an arbitrary requirement. It's real patching with a narrow, honest scope, not general code generation.
+- **LLM-backed normalization is opt-in and narrow.** `--use-llm` (`agentic_system.prompted_agents`) improves intent/ambiguity interpretation specifically; it deliberately does not touch `functional_scope` or the rest of the pipeline (see the module docstring for why), and every safety-critical field is validated or recomputed rather than trusted from the model. The rest of `agentic_system.agents` remains deterministic by default, for reviewability.
 - **No resume for interrupted runs** — runs are saved as snapshots, but there's no retry/resume lifecycle yet.
 - **Brownfield analysis is heuristic** — keyword-scored, not a real dependency graph.
-- **Deterministic, not LLM-backed** — `agentic_system.agents` is rule-based by design, for reviewability. The orchestrator calls those functions through a fixed interface specifically so an LLM-backed implementation can be swapped in later without touching the orchestration logic.
 - **No richer risk-policy enforcement** — there's an approval gate, but no policy engine restricting destructive or high-impact autonomous actions beyond it.

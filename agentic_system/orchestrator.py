@@ -4,7 +4,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from . import agents
+from . import agents, prompted_agents
 from .materializer import materialize_cicd_workflows, materialize_url_shortener
 from .models import EngineeringTask, RunResult, TaskState
 from .verifier import verify_generated_application
@@ -16,11 +16,13 @@ def _build_sandbox_patch_preview(normalized_requirement: dict[str, Any]) -> dict
         "mode": "preview",
         "allowed": True,
         "files": [
+            "url_shortener/__init__.py",
             "url_shortener/app.py",
             "url_shortener/store.py",
             "tests/test_url_shortener.py",
             ".github/workflows/ci.yml",
             ".github/workflows/cd.yml",
+            "Dockerfile",
         ],
         "summary": f"Planned change for: {normalized_requirement.get('intent', 'engineering change')}",
     }
@@ -29,8 +31,9 @@ def _build_sandbox_patch_preview(normalized_requirement: dict[str, Any]) -> dict
 class WorkflowOrchestrator:
     """Run dependency-aware work and keep the human approval boundary explicit."""
 
-    def __init__(self, approved: bool = False) -> None:
+    def __init__(self, approved: bool = False, use_llm: bool = False) -> None:
         self.approved = approved
+        self.use_llm = use_llm
 
     def run(
         self,
@@ -50,8 +53,9 @@ class WorkflowOrchestrator:
         }
         artifacts: dict[str, Any] = {}
         trace: list[dict[str, str]] = []
+        normalize_fn = prompted_agents.normalize_requirement if self.use_llm else agents.normalize_requirement
         handlers: dict[str, Callable[[], dict[str, Any]]] = {
-            "normalize": lambda: agents.normalize_requirement(requirement, repository_path),
+            "normalize": lambda: normalize_fn(requirement, repository_path),
             "codebase_analysis": lambda: agents.analyze_codebase(repository_path, artifacts["normalized_requirement"]),
             "plan": agents.build_task_plan,
             "architecture": lambda: agents.design_architecture(artifacts["normalized_requirement"]),

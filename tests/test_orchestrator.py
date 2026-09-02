@@ -1,6 +1,7 @@
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from agentic_system.orchestrator import WorkflowOrchestrator
 
@@ -65,6 +66,17 @@ class WorkflowOrchestratorTests(unittest.TestCase):
             self.assertTrue(latest_history.exists())
             self.assertIn("scenarios", result.artifacts)
             self.assertIn("greenfield", result.artifacts["scenarios"])
+
+    def test_use_llm_falls_back_to_deterministic_normalization_without_a_key(self) -> None:
+        # No ANTHROPIC_API_KEY is configured in this test environment, so a run with
+        # use_llm=True must behave identically to a deterministic run rather than error.
+        with patch.dict("os.environ", {}, clear=True):
+            result = WorkflowOrchestrator(approved=True, use_llm=True).run(
+                "Build a scalable URL shortener service with APIs, persistence, and analytics."
+            )
+
+        self.assertEqual(result.status, "completed")
+        self.assertIn("POST /v1/links", result.artifacts["engineering_artifacts"]["api_contract"])
 
     def test_high_risk_requirements_need_approval(self) -> None:
         result = WorkflowOrchestrator().run(
