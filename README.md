@@ -1,99 +1,57 @@
 # Agentic Software Engineering System
 
-This project is a small, runnable prototype for the interview assignment. It turns a requirement into a structured engineering outcome: a normalized problem statement, a dependency-aware plan, an architecture proposal, implementation artifacts, validation results, and a final summary.
+## What this is
 
-It also includes a URL-shortener service that acts as the mandatory greenfield example. The workflow is deterministic for reviewability, but it now includes real interview-level features such as brownfield impact scoring, risk-aware approval gates, scenario outputs, sandbox patch preview metadata, and persisted run history. The orchestration boundary remains separate from the agent functions so an LLM or repository-inspection tool can be added later.
+Give it one sentence describing a software requirement, and it works through the request the way a disciplined engineer would — not a chatbot that just talks about code, a system that actually decomposes, builds, and validates it.
 
-## What is included
+```
+"Build a scalable URL shortener service with APIs, persistence, and analytics."
 
-- A controlled workflow with an explicit approval gate and risk-aware escalation.
-- A JSON execution trace that makes task sequencing visible.
-- Brownfield repository analysis with impact scoring and risk metadata.
-- Persisted run snapshots under `generated/history/latest.json` for review and resume awareness.
-- Scenario outputs for greenfield, brownfield, and ambiguous requirements.
-- A sandbox patch preview model that records the intended file changes without writing to a real repository.
-- A FastAPI URL-shortener service with SQLite storage, redirects, expiry handling, and click analytics.
-- Observability built into that service: structured JSON request logs, request-correlation IDs, and a Prometheus `/metrics` endpoint, plus separate liveness (`/health`) and readiness (`/ready`) checks. See [Observability](#observability).
-- A generated deploy pipeline (GitHub Actions CI/CD workflows and a Dockerfile) for the generated application, recomputed on every run from the requirement's risk and classification, including lint/security-scan quality gates. See [CI/CD for the generated software](#cicd-for-the-generated-software).
-- Security and quality gates on the agent tool's own pipeline too: `ruff` (lint), `bandit` (SAST), and `pip-audit` (dependency vulnerabilities) run in CI on every push and PR.
-- Unit and API tests.
-- An architecture note with a control-flow diagram and an HA/failover section: [docs/architecture.md](docs/architecture.md).
-- Three polished scenario write-ups (greenfield, brownfield, ambiguous) with real captured output: [docs/scenarios/](docs/scenarios/).
-- A testing-approach doc covering all five validation layers and their known limitations: [docs/testing-approach.md](docs/testing-approach.md).
-- An operational runbook and RCA template for the generated service: [docs/runbook.md](docs/runbook.md).
-- A documented branching strategy and PR process: [CONTRIBUTING.md](CONTRIBUTING.md).
+1. Understand  — figures out what's being asked, and what's unclear about it
+2. Plan        — an ordered checklist of the work, each step gated on the last
+3. Design      — picks the architecture and explains why
+4. ⏸ Approve   — stops here. A human must say "go ahead" before anything is built
+                 (anything that looks risky needs an even more deliberate approval)
+5. Build       — writes the code, the tests, and the documentation
+6. Verify      — runs it, tests it, and auto-repairs if something's broken
+7. Summarize   — what shipped, the risks, and the trade-offs
+```
 
-## Prerequisites
+Every one of those steps is written down as it happens — nothing happens silently, and anyone can see exactly what was decided and why.
 
-- Git 2.40 or newer
-- Python 3.11 or newer
-- PowerShell on Windows (the commands below use PowerShell)
+To prove this is real and not just a pitch, the repo ships with something the system actually built: a working **URL shortener** (`url_shortener/`, like bit.ly) you can run and send real requests to. Three more real, captured examples of full runs — including one where the system correctly *stops and asks a human* instead of guessing — are written up in plain language in [docs/scenarios/](docs/scenarios/).
 
-No database server or API key is required for the local demo.
-
-## Get the project from scratch
-
-### Clone it from GitHub
+## Quick start
 
 ```powershell
 git clone https://github.com/HarshaYeluru/agentic-software-engineering-system.git
 Set-Location agentic-software-engineering-system
-```
 
-## Set up Python
-
-Create and activate a virtual environment, then install the project in editable mode:
-
-```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
-python -m pip install -e .
-```
-
-If your PowerShell policy prevents activation, use the virtual-environment interpreter directly in every command instead:
-
-```powershell
-.\.venv\Scripts\python.exe -m pip install -e .
-```
-
-## Verify the installation
-
-Install the project (including the dev/lint/security tooling) and run the complete test suite:
-
-```powershell
 python -m pip install -e ".[dev]"
-python -m unittest discover -s tests -v
+
+python -m unittest discover -s tests -v   # confirm the setup works: expect every test to pass
+
+python -m agentic_system.cli --requirement "Build a scalable URL shortener service with APIs, persistence, and analytics." --approve
 ```
 
-Expected result: all tests pass. To run the same quality and security gates CI runs:
+That last command *is* the system, end to end. It prints a status line and writes the full decision trail to `generated/run.json` — open it in any editor to see everything that was decided, in order, plus a runnable copy of the URL shortener at `generated/apps/url_shortener/`.
+
+**Prerequisites:** Git 2.40+, Python 3.11+, PowerShell (all commands below are PowerShell). No database or API key needed. If your PowerShell execution policy blocks `Activate.ps1`, skip activation and prefix every command with `.\.venv\Scripts\python.exe -m` instead.
+
+## Try the interesting behaviors
+
+**Watch it pause instead of guess**, on a deliberately vague requirement:
 
 ```powershell
-ruff check .
-bandit -q -r agentic_system url_shortener
-pip-audit
+python -m agentic_system.cli --requirement "Make analytics better"
 ```
 
-## GitHub Actions CI/CD
+It still does real work — normalizes the request, checks the codebase, drafts a plan — then stops (`awaiting_approval`) instead of inventing an answer to a question it can't yet interpret. Write-up: [docs/scenarios/ambiguous.md](docs/scenarios/ambiguous.md).
 
-This repository includes GitHub Actions workflows for continuous integration and release-style validation of the **agent tool itself**:
-
-- `.github/workflows/ci.yml` runs on pushes and pull requests: installs the package with dev extras, lints with `ruff`, runs a security scan with `bandit`, audits dependencies with `pip-audit`, runs the full unit test suite, and finally smoke-tests the CLI end to end.
-- `.github/workflows/cd.yml` runs after a successful CI pass (or via manual dispatch) to create a runtime smoke-test artifact from the generated workflow output.
-
-The workflows are configured for Python 3.11 and target the same commands used in local validation so the GitHub pipeline matches the developer experience. See [CONTRIBUTING.md](CONTRIBUTING.md) for the branching strategy and PR process these gates support.
-
-## CI/CD for the generated software
-
-Separately from the workflows above, the engineering workflow also produces a deploy pipeline **for the software it generates**, as one of the implementation artifacts (alongside the API contract, implementation plan, and test cases). Every run writes:
-
-- `generated/apps/url_shortener/.github/workflows/ci.yml` — installs the app and runs its test suite; on a brownfield change it adds a full regression pass, and on a high-risk change it adds a dependency security audit.
-- `generated/apps/url_shortener/.github/workflows/cd.yml` — builds a Docker image and pushes it to a container registry; on a high-risk change it gates the job behind a `production` environment and a manual-approval step.
-- `generated/apps/url_shortener/Dockerfile` — a runnable image for the generated app.
-
-This pipeline definition is recomputed from the current requirement's risk level and greenfield/brownfield classification on every run, rather than hand-maintained, so it stays in sync with the software as it changes. The `cicd_pipeline` artifact in `generated/run.json` records the rationale for what was included; validation (`generated/run.json` → `validation.checks`) confirms the workflow files exist and are structurally valid before the run is marked complete.
-
-To see it react to risk, compare two runs:
+**Watch its own deploy pipeline change shape with risk:**
 
 ```powershell
 python -m agentic_system.cli --requirement "Build a scalable URL shortener service with APIs, persistence, and analytics." --approve
@@ -103,162 +61,114 @@ python -m agentic_system.cli --requirement "Delete all production data and migra
 Get-Content generated\apps\url_shortener\.github\workflows\cd.yml
 ```
 
-The second run adds a dependency audit step to CI and a manual-approval gate to CD; a subsequent low-risk run removes them again.
+The second, riskier requirement adds a dependency-security-audit step to CI and a manual-approval gate to the deploy pipeline. That pipeline is regenerated from the requirement on every run, not hand-maintained — see [GitHub Actions CI/CD](#github-actions-cicd) below.
 
-## Run the engineering workflow
-
-The `--approve` flag represents a human approving the plan and recorded assumptions before implementation artifacts are produced.
-
-To reset the local demo before an evaluation, run this optional cleanup command. It removes `generated/run.json`, the workflow-materialized application in `generated/apps/url_shortener/`, and the local URL-shortener SQLite files (including SQLite journal files). The generated application folder is marked when it is created, so cleanup refuses to remove an unmarked directory. It never deletes Git-tracked source code, tests, or documentation.
+**Point it at a real codebase:**
 
 ```powershell
-python -m agentic_system.cli --clean
+python -m agentic_system.cli --requirement "Add expiry support to the existing URL shortener" --repository-path "C:\path\to\existing-repository" --approve
 ```
 
-To clean and immediately create a fresh workflow result, add `--clean` to the run command below.
+A bounded, read-only scan (at most 250 files) reports which files look relevant and how risky the change is. It never writes to the target repository. Write-up: [docs/scenarios/brownfield.md](docs/scenarios/brownfield.md).
 
-```powershell
-python -m agentic_system.cli `
-  --clean `
-  --requirement "Build a scalable URL shortener service with APIs, persistence, and analytics." `
-  --approve
-```
-
-The workflow writes `generated/run.json` and materializes a runnable URL-shortener artifact at `generated/apps/url_shortener/`. It also persists a latest snapshot in `generated/history/latest.json` so each run remains reviewable and easy to compare. The JSON includes task graph state, generated artifacts, validation checks, assumptions, risk metadata, and scenario outputs.
-
-To run the generated application specifically, use:
-
-```powershell
-python -m uvicorn url_shortener.app:app --app-dir generated/apps --reload
-```
-
-To see the approval gate in action, omit `--approve`:
-
-```powershell
-python -m agentic_system.cli --requirement "Make analytics better"
-```
-
-High-risk requests automatically trigger a stronger approval requirement. The workflow records the normalized requirement risk level and keeps the approval boundary explicit.
-
-### Brownfield analysis
-
-Point the workflow at an existing repository to include a bounded, read-only impact scan in the engineering summary. The result includes impact scoring, candidate files, and a risk level for the requested change:
-
-```powershell
-python -m agentic_system.cli `
-  --requirement "Add expiry support to the existing URL shortener" `
-  --repository-path "C:\path\to\existing-repository" `
-  --approve
-```
-
-The scan ignores common dependency/build directories, inspects at most 250 source files, reports heuristic candidate files, and now scores the likely impact for the requested change. It does not write to the target repository.
-
-### Scenario outputs
-
-The workflow includes explicit scenario examples for common review cases, both as a short in-payload summary (`agents.generate_scenarios()`, included in every `run.json`) and as full write-ups with real captured output:
-
-- [docs/scenarios/greenfield.md](docs/scenarios/greenfield.md) — a fresh service build
-- [docs/scenarios/brownfield.md](docs/scenarios/brownfield.md) — an enhancement to an existing system, with a real repository scan
-- [docs/scenarios/ambiguous.md](docs/scenarios/ambiguous.md) — a vague requirement that pauses for human approval
-
-Each write-up shows the task decomposition, the orchestration trace, and the validation result for that run.
-
-### Local review UI
-
-Start the reviewer interface:
+**Use a browser instead of the command line:**
 
 ```powershell
 python -m uvicorn agentic_system.review_app:app --reload --port 8001
 ```
 
-Open [http://127.0.0.1:8001](http://127.0.0.1:8001). The UI lets an interviewer run a requirement, inspect the full JSON trace, and choose whether to approve the plan before generated artifacts are materialized.
+Open [http://127.0.0.1:8001](http://127.0.0.1:8001) — run a requirement, inspect the full JSON trace, and approve (or not) before anything gets built.
 
-## Run the URL-shortener API
-
-Start the API from the repository root:
+## Run the generated URL-shortener service
 
 ```powershell
 python -m uvicorn url_shortener.app:app --reload
 ```
 
-If PowerShell cannot find `uvicorn`, use:
+Open [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs) for interactive API docs, or exercise it directly:
 
 ```powershell
-.\.venv\Scripts\python.exe -m uvicorn url_shortener.app:app --reload
-```
-
-Open [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs) for interactive Swagger documentation.
-
-### Quick API check
-
-In a second PowerShell window:
-
-```powershell
-$link = Invoke-RestMethod -Method Post `
-  -Uri "http://127.0.0.1:8000/v1/links" `
-  -ContentType "application/json" `
-  -Body '{"url":"https://example.com/article"}'
-
+$link = Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:8000/v1/links" `
+  -ContentType "application/json" -Body '{"url":"https://example.com/article"}'
 $link
 Invoke-RestMethod "http://127.0.0.1:8000/v1/links/$($link.code)/analytics"
 ```
 
-Visit `$link.short_url` in a browser to record a redirect event, then run the analytics command again. Local data is stored in `data/url_shortener.sqlite3`; it is ignored by Git.
-
-## API endpoints
+Visit `$link.short_url` in a browser to record a click, then check analytics again. Local data lives in `data/url_shortener.sqlite3` (ignored by Git). If PowerShell can't find `uvicorn`, use `.\.venv\Scripts\python.exe -m uvicorn ...`.
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| `GET` | `/health` | Liveness check — process is up, no dependency checks |
-| `GET` | `/ready` | Readiness check — process is up *and* the database is reachable |
-| `GET` | `/metrics` | Prometheus metrics (requests, latency histogram, links created, redirects) |
+| `GET` | `/health` | Liveness — process is up |
+| `GET` | `/ready` | Readiness — process **and** database are reachable |
+| `GET` | `/metrics` | Prometheus metrics |
 | `POST` | `/v1/links` | Create a short link |
 | `GET` | `/{code}` | Redirect and record a click |
-| `GET` | `/v1/links/{code}/analytics` | Return total recorded clicks |
+| `GET` | `/v1/links/{code}/analytics` | Total recorded clicks |
 
-## Observability
+Every response carries an `X-Request-ID` header, and every request is logged as one JSON line — see [Observability](docs/architecture.md#observability) for what each signal is for and [docs/runbook.md](docs/runbook.md) for how they're used during an incident.
 
-Every response carries an `X-Request-ID` header, and every request is logged as one JSON line to stdout. Check it locally:
+## What's inside
 
-```powershell
-python -m uvicorn url_shortener.app:app --reload
-# in another window
-Invoke-RestMethod http://127.0.0.1:8000/ready
-Invoke-RestMethod http://127.0.0.1:8000/metrics
-```
+- **A controlled, dependency-aware workflow** with an explicit human-approval gate and risk-based escalation — the JSON trace in `generated/run.json` makes every decision inspectable.
+- **Brownfield repository analysis** — a read-only impact scan against an existing codebase.
+- **Persisted run history** under `generated/history/latest.json`, so runs stay reviewable and comparable.
+- **A sandbox patch preview** — records the files a real change would touch, without writing to a real repository.
+- **A generated deploy pipeline** (GitHub Actions + a Dockerfile) for whatever it builds, regenerated every run from the requirement's risk level.
+- **Its own CI/CD**, with lint (`ruff`), security scanning (`bandit`), and dependency auditing (`pip-audit`) on every push.
+- **Observability** in the generated service: structured logs, correlation IDs, Prometheus metrics, separate liveness/readiness checks.
 
-See [docs/architecture.md#observability](docs/architecture.md#observability) for what each signal is for and [docs/runbook.md](docs/runbook.md) for how they're used during an incident.
+Each of those is covered in depth in its own doc rather than crammed in here:
+
+| Doc | What's in it |
+| --- | --- |
+| [docs/architecture.md](docs/architecture.md) | Control-flow diagram, separation of responsibilities, observability, HA/failover design |
+| [docs/scenarios/](docs/scenarios/) | Three real, captured runs: greenfield, brownfield, ambiguous |
+| [docs/testing-approach.md](docs/testing-approach.md) | The five validation layers this project has, and their known limitations |
+| [docs/runbook.md](docs/runbook.md) | On-call playbook and RCA template for the generated service |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | Branching strategy and PR process |
+
+## GitHub Actions CI/CD
+
+Two separate pipelines exist, for two separate things:
+
+- **The agent tool's own pipeline** (`.github/workflows/ci.yml`, `cd.yml`) — installs the package, lints with `ruff`, security-scans with `bandit`, audits dependencies with `pip-audit`, runs the full test suite, and smoke-tests the CLI end to end on every push and PR. `cd.yml` repeats that smoke test after a successful CI run and uploads the result as a build artifact.
+- **CI/CD for the generated software** — a *separate* pipeline the workflow produces as one of its implementation artifacts (alongside the API contract and test cases), written to `generated/apps/url_shortener/.github/workflows/{ci,cd}.yml` plus a `Dockerfile`, every time it builds the URL shortener. It reacts to the requirement: a brownfield change adds a full regression pass, a high-risk change adds a dependency audit and a manual-approval gate before deploy (see [Try the interesting behaviors](#try-the-interesting-behaviors) above for a live comparison). The `cicd_pipeline` artifact in `generated/run.json` records why each step was included, and validation confirms the workflow files exist and are well-formed before a run is marked complete.
+
+## Everyday commands
+
+| What | Command |
+| --- | --- |
+| Run a requirement | `python -m agentic_system.cli --requirement "..." --approve` |
+| Run without approving (see the gate) | `python -m agentic_system.cli --requirement "..."` |
+| Scan an existing repo | add `--repository-path "C:\path\to\repo"` |
+| Reset local demo state | `python -m agentic_system.cli --clean` |
+| Clean, then run fresh | add `--clean` to any run command |
+| Run the test suite | `python -m unittest discover -s tests -v` |
+| Lint / security-scan / audit (what CI runs) | `ruff check .` / `bandit -q -r agentic_system url_shortener` / `pip-audit` |
+
+`--clean` removes `generated/run.json`, the materialized app under `generated/apps/url_shortener/`, and the local SQLite files — it never touches Git-tracked source, tests, or docs (the generated app folder is marked on creation, and cleanup refuses to remove an unmarked directory).
 
 ## Project layout
 
 ```text
-agentic_system/       Workflow coordinator and deterministic agent functions
-url_shortener/        FastAPI reference implementation and SQLite store
-tests/                Workflow and API tests
-docs/                 Architecture, HA/observability notes, runbook, and scenario write-ups
-.github/              CI/CD workflows, PR template, CODEOWNERS
-CONTRIBUTING.md       Branching strategy and PR process
-generated/            Local workflow output (ignored by Git)
-data/                 Local SQLite database (ignored by Git)
+agentic_system/    Workflow coordinator and deterministic agent functions
+url_shortener/     FastAPI reference implementation and SQLite store
+tests/             Workflow and API tests
+docs/              Architecture, HA/observability notes, runbook, and scenario write-ups
+.github/           CI/CD workflows, PR template, CODEOWNERS
+CONTRIBUTING.md    Branching strategy and PR process
+generated/         Local workflow output (ignored by Git)
+data/              Local SQLite database (ignored by Git)
 ```
 
-## Design boundaries and next steps
+## Design boundaries and what's next
 
-SQLite is used only to keep the example zero-setup. For production, the architecture proposes PostgreSQL for links, Redis for cache-aside redirects, and asynchronous analytics processing — see [docs/architecture.md#high-availability-and-failover](docs/architecture.md#high-availability-and-failover) for how that maps to an HA, multi-region deployment. The next assignment milestone is an LLM-backed agent implementation (see [Next steps](#next-steps) below); brownfield repository analysis and three polished scenario reports are already implemented.
+SQLite keeps the local demo zero-setup. The production target is PostgreSQL for links, Redis for cache-aside redirects, and asynchronous analytics — see [HA and failover](docs/architecture.md#high-availability-and-failover) for how that maps to a multi-region deployment.
 
-## Next steps
+Known gaps, stated rather than hidden:
 
-### Real repository patching
-This system generates and validates artifacts, but it does not yet apply real code changes to an existing repository in a controlled patch workflow.
-
-### Persistent run history and resume
-Runs are saved as snapshots, but the project does not yet provide a full lifecycle of historical runs, retries, or resume flows for interrupted work.
-
-### Stronger brownfield analysis
-The repository scan is useful for a demo, but it is still heuristic-based and could be improved with deeper dependency and impact analysis.
-
-### Prompt-engineered agent functions
-`agentic_system.agents` is deterministic by design, for reviewability. The orchestration boundary (`orchestrator.py` calling `agents.*` functions with a fixed signature) is kept separate from the decision logic specifically so an LLM-backed implementation of `normalize_requirement`/`analyze_codebase`/`generate_engineering_artifacts` can be swapped in later without touching the orchestrator.
-
-### Risk-policy enforcement
-The system has an approval gate, but it still needs richer risk policies to restrict destructive or high-impact autonomous actions.
+- **No real repository patching** — the workflow generates and validates artifacts but doesn't yet apply changes to an existing repository through a controlled patch flow.
+- **No resume for interrupted runs** — runs are saved as snapshots, but there's no retry/resume lifecycle yet.
+- **Brownfield analysis is heuristic** — keyword-scored, not a real dependency graph.
+- **Deterministic, not LLM-backed** — `agentic_system.agents` is rule-based by design, for reviewability. The orchestrator calls those functions through a fixed interface specifically so an LLM-backed implementation can be swapped in later without touching the orchestration logic.
+- **No richer risk-policy enforcement** — there's an approval gate, but no policy engine restricting destructive or high-impact autonomous actions beyond it.
