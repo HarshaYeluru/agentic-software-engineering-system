@@ -10,6 +10,7 @@ from typing import Any
 
 from .agents import URL_SHORTENER_SCOPE
 from .materializer import reference_application_files, render_cicd_files
+from .observability import AGENT_PATCH_APPLY_TOTAL, log_event
 
 PATCH_BACKUP_DIRECTORY = ".agentic-patch-backup"
 
@@ -104,6 +105,7 @@ def apply_patch(plan: PatchPlan) -> dict[str, Any]:
     backup so ``rollback_patch`` can restore updates and remove creations.
     """
     if not plan.changes:
+        AGENT_PATCH_APPLY_TOTAL.labels(outcome="no_changes").inc()
         return {"applied": False, "reason": "no changes to apply", "files": []}
 
     run_id = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
@@ -133,6 +135,13 @@ def apply_patch(plan: PatchPlan) -> dict[str, Any]:
     }
     (backup_directory / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
 
+    AGENT_PATCH_APPLY_TOTAL.labels(outcome="applied").inc()
+    log_event(
+        "patch_applied",
+        run_id=run_id,
+        target_repository=str(plan.target_repository),
+        files=len(applied_files),
+    )
     return {
         "applied": True,
         "run_id": run_id,
@@ -161,4 +170,5 @@ def rollback_patch(target_repository: Path, run_id: str) -> list[str]:
             target_path.unlink()
             actions.append(f"removed: {entry['path']}")
 
+    log_event("patch_rolled_back", run_id=run_id, target_repository=str(target_repository), actions=len(actions))
     return actions

@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any, Protocol
 
 from . import agents as deterministic_agents
+from .observability import AGENT_LLM_FALLBACK_TOTAL, log_event
 
 VALID_CLASSIFICATIONS = {"greenfield", "brownfield", "ambiguous"}
 
@@ -124,6 +125,8 @@ def normalize_requirement(
 
     if client is None:
         if not llm_available():
+            AGENT_LLM_FALLBACK_TOTAL.labels(reason="no_credentials").inc()
+            log_event("llm_fallback", reason="no_credentials")
             return fallback
         client = AnthropicClient()
 
@@ -134,6 +137,8 @@ def normalize_requirement(
         raw_response = client.complete(prompt)
         parsed = _extract_json_object(raw_response)
     except Exception:
+        AGENT_LLM_FALLBACK_TOTAL.labels(reason="call_or_parse_error").inc()
+        log_event("llm_fallback", reason="call_or_parse_error")
         return fallback
 
     return _validate_and_merge(parsed, fallback)

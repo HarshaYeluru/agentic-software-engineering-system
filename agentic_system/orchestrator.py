@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -7,7 +8,20 @@ from typing import Any
 from . import agents, prompted_agents
 from .materializer import materialize_cicd_workflows, materialize_url_shortener
 from .models import EngineeringTask, RunResult, TaskState
+from .observability import AGENT_RUN_DURATION, AGENT_RUNS_TOTAL, AGENT_TASK_DURATION, log_event
 from .verifier import verify_generated_application
+
+
+def _finish_run(status: str, requirement: str, started_at: float) -> None:
+    duration_seconds = time.perf_counter() - started_at
+    AGENT_RUNS_TOTAL.labels(status=status).inc()
+    AGENT_RUN_DURATION.observe(duration_seconds)
+    log_event(
+        "run_finished",
+        status=status,
+        duration_ms=round(duration_seconds * 1000, 2),
+        requirement=requirement[:120],
+    )
 
 
 def _build_sandbox_patch_preview(normalized_requirement: dict[str, Any]) -> dict[str, Any]:
@@ -41,6 +55,7 @@ class WorkflowOrchestrator:
         output_directory: Path | None = None,
         repository_path: Path | None = None,
     ) -> RunResult:
+        run_started_at = time.perf_counter()
         tasks = {
             "normalize": EngineeringTask("normalize", "Understand and normalize requirement"),
             "codebase_analysis": EngineeringTask("codebase_analysis", "Analyze repository impact", ["normalize"]),
@@ -93,18 +108,21 @@ class WorkflowOrchestrator:
                     else:
                         task.state = TaskState.BLOCKED
                         trace.append({"task": task.id, "event": "blocked: human approval required"})
+                    _finish_run("awaiting_approval", requirement, run_started_at)
                     if output_directory is not None:
                         result = RunResult(requirement, tasks, artifacts, trace, "awaiting_approval")
                         result.save_history(output_directory)
                         return result
                     return RunResult(requirement, tasks, artifacts, trace, "awaiting_approval")
                 if not self._execute_task(task, handlers, artifacts, artifact_names, trace):
+                    _finish_run("failed", requirement, run_started_at)
                     result = RunResult(requirement, tasks, artifacts, trace, "failed")
                     if output_directory is not None:
                         result.save_history(output_directory)
                     return result
 
         status = "completed" if tasks["summary"].state is TaskState.COMPLETED else "failed"
+        _finish_run(status, requirement, run_started_at)
         result = RunResult(requirement, tasks, artifacts, trace, status)
         if output_directory is not None:
             result.save_history(output_directory)
@@ -162,6 +180,7 @@ class WorkflowOrchestrator:
         """Run one task and record failures as reviewable workflow output."""
         task.state = TaskState.RUNNING
         trace.append({"task": task.id, "event": "started"})
+        started_at = time.perf_counter()
         try:
             if task.requires_approval:
                 task.result = {
@@ -173,13 +192,19 @@ class WorkflowOrchestrator:
                 task.result = handlers[task.id]()
                 artifacts[artifact_names[task.id]] = task.result
         except (KeyError, ValueError) as error:
+            duration_seconds = time.perf_counter() - started_at
+            AGENT_TASK_DURATION.labels(task=task.id).observe(duration_seconds)
             task.state = TaskState.FAILED
             task.result = {"error": str(error)}
             trace.append({"task": task.id, "event": f"failed: {error}"})
+            log_event("task_finished", task=task.id, status="failed", duration_ms=round(duration_seconds * 1000, 2))
             return False
 
+        duration_seconds = time.perf_counter() - started_at
+        AGENT_TASK_DURATION.labels(task=task.id).observe(duration_seconds)
         task.state = TaskState.COMPLETED
         trace.append({"task": task.id, "event": "completed"})
+        log_event("task_finished", task=task.id, status="completed", duration_ms=round(duration_seconds * 1000, 2))
         return True
 
     @staticmethod
