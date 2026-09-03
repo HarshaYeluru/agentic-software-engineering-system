@@ -19,7 +19,7 @@ CMD ["uvicorn", "url_shortener.app:app", "--app-dir", "/app", "--host", "0.0.0.0
 _CI_STEP_LIBRARY: dict[str, tuple[str, list[str]]] = {
     "install_dependencies": (
         "Install project dependencies",
-        ["python -m pip install --upgrade pip", "python -m pip install -e \".[dev]\""],
+        ["python -m pip install --upgrade pip setuptools", "python -m pip install -e \".[dev]\""],
     ),
     "lint_and_security_scan": (
         "Lint and security scan (ruff, bandit)",
