@@ -56,14 +56,19 @@ flowchart TB
 - **The approval gate needs a real identity behind it.** Locally, `--approve` is trusted because the person typing it and the person accountable for the change are the same person. In a shared service, "approved: true" needs to be tied to an authenticated caller (their SSO identity, an audit-logged action), not just a boolean flag anyone with API access can set — otherwise the approval gate is theater rather than the control it's meant to be.
 - **LLM calls need their own resilience story.** `prompted_agents.normalize_requirement` already falls back to the deterministic path on any failure (see [README](../README.md#try-the-interesting-behaviors)) — that behavior is exactly right for a hosted service too, but now it needs a timeout tuned for real latency variance and its own metric (LLM call failure rate, fallback rate) so a degraded provider is visible rather than silently absorbed.
 
-## Observability: the piece the generated app has that the agent doesn't yet
+## Observability: the agent's own operational health, not just the app it builds
 
-The generated `url_shortener` service has `/metrics`, structured JSON logs, and correlation IDs (see [Observability](../url_shortener/docs/architecture.md#observability)) — the agent's own orchestrator does not, today. Hosting the agent is the forcing function to add that, and it should track things specific to the agent's job, not reuse the web-service metric names verbatim:
+The generated `url_shortener` service has `/metrics`, structured JSON logs, and correlation IDs (see [Observability](../url_shortener/docs/architecture.md#observability)) — and now the orchestrator does too, via `agentic_system.observability`. Every run through the CLI *or* the review UI goes through `WorkflowOrchestrator.run()`, so both paths update the same metrics automatically:
 
-- `agent_runs_total{status}` — completed / awaiting_approval / failed, so you can see approval-gate friction and failure rate over time, not just per-run.
-- `agent_run_duration_seconds` — a histogram, per task (`normalize`, `codebase_analysis`, `architecture`, `implementation`, `validation`), so a regression in one stage is visible instead of only "the whole run got slower."
-- `agent_llm_fallback_total` — every time `--use-llm` was requested but fell back to the deterministic path (no key, timeout, malformed response) — this is the signal that tells you whether the LLM path is actually healthy in production.
-- `agent_patch_apply_total{outcome}` — applied / rolled_back / rejected, given this is the most consequential action the service can take.
+- `agent_runs_total{status}` — completed / awaiting_approval / failed, so approval-gate friction and failure rate are visible over time, not just per-run.
+- `agent_run_duration_seconds` — a histogram of total run duration.
+- `agent_task_duration_seconds{task}` — a histogram per task (`normalize`, `codebase_analysis`, `architecture`, `implementation`, `validation`, ...), so a regression in one stage is visible instead of only "the whole run got slower." In practice `validation` is the slow one today — it shells out to compile and run the materialized app's real test suite — which is exactly the kind of thing this metric is for.
+- `agent_llm_fallback_total{reason}` — every time `--use-llm` was requested but fell back to the deterministic path, split by `no_credentials` vs `call_or_parse_error` — the signal that tells you whether the LLM path is actually healthy, not just enabled.
+- `agent_patch_apply_total{outcome}` — `applied` or `no_changes`, from `patcher.apply_patch` directly so it fires regardless of caller. Rollbacks are logged (`patch_rolled_back`) but not yet counted as a separate metric — rare and manual enough today that an audit-log line covers it; add a counter if rollback frequency ever becomes worth alerting on.
+
+`GET /metrics` on `agentic_system.review_app` (the same app the packaging section below containerizes) exposes all of it in Prometheus text format — that's the live scrape point once the agent runs as a persistent service rather than a one-shot CLI. For the CLI's one-shot invocations, the structured JSON logs (`agentic_system` logger, one line per task and per run) are the primary observability mechanism instead — a fresh process can't meaningfully expose a running Counter total for anyone to scrape between invocations, so log aggregation is the correct mechanism there, not a `/metrics` snapshot file.
+
+What's still missing for a real hosted deployment: metrics don't yet aggregate *across* replicas (each worker's `/metrics` is only that worker's in-process counters — a real deployment needs Prometheus federation or a shared registry), and there's no alerting wired to any of this yet, just the raw signal.
 
 ## CI/CD for the agent service itself
 

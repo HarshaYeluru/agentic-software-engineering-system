@@ -43,7 +43,17 @@ flowchart TD
 - `agentic_system.verifier` re-checks what `materializer` wrote (compiles, runs the app's tests, confirms the CI/CD files exist and look valid) so a broken materialization is caught before the run is marked complete.
 - `agentic_system.patcher` applies changes to a *real, external* repository — a different, higher-stakes operation than `materializer` writing into the sandboxed `generated/` directory, so it's a separate module with its own gate (see [Guardrails](#guardrails)).
 - `agentic_system.prompted_agents` is the one LLM-backed module. It mirrors `agents.normalize_requirement`'s interface exactly, so the orchestrator can swap between them (`use_llm`) without knowing which one it's calling — see its module docstring for the validation rules that keep model output from reaching the approval gate unchecked.
+- `agentic_system.observability` holds the structured logger and Prometheus metric objects both the orchestrator and the patcher instrument through — kept as one shared module (rather than each caller defining its own) so a run through the CLI and a run through `review_app` update the exact same counters, and so metric names can't drift between call sites.
 - `url_shortener` is the generated/reference greenfield output. Keeping it separate prevents the workflow engine and the product code from becoming coupled. Its own architecture — deployment path, observability, HA/failover — lives with it at [../url_shortener/docs/architecture.md](../url_shortener/docs/architecture.md), not here, since those are properties of the generated app, not the agent.
+
+## Observability
+
+The generated `url_shortener` app is instrumented (see [its own doc](../url_shortener/docs/architecture.md#observability)) — and so is the agent that builds it, via `agentic_system.observability`:
+
+- **Structured logs** — one JSON line per task transition (`task_finished`, with `task`, `status`, `duration_ms`) and per run (`run_finished`, with `status`, `duration_ms`, a truncated `requirement`), plus `llm_fallback`, `patch_applied`, and `patch_rolled_back` events from the LLM and repository-writing paths. Same shape as `url_shortener`'s request logs, so both halves of this project are ingestible by one log pipeline.
+- **Metrics** — `agent_runs_total{status}`, `agent_run_duration_seconds`, `agent_task_duration_seconds{task}`, `agent_llm_fallback_total{reason}`, `agent_patch_apply_total{outcome}`. `GET /metrics` on `agentic_system.review_app` exposes all of it in Prometheus text format, since that's the persistent-process form of the agent — a one-shot CLI invocation has nothing to scrape after it exits, so the CLI relies on the structured logs above instead of a metrics endpoint.
+
+This exists specifically to answer "how do you know if a workflow run silently regressed" for the agent itself, not just for the software it produces — see [hosting-the-agent.md](hosting-the-agent.md#observability-the-agents-own-operational-health-not-just-the-app-it-builds) for the full reasoning and what's still missing (cross-replica aggregation, alerting).
 
 ## Guardrails
 

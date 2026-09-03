@@ -134,7 +134,8 @@ Every response carries an `X-Request-ID` header, and every request is logged as 
 - **Persisted run history** under `generated/history/latest.json`, so runs stay reviewable and comparable.
 - **A generated deploy pipeline** (GitHub Actions + a Dockerfile) for whatever it builds, regenerated every run from the requirement's risk level.
 - **Its own CI/CD**, with lint (`ruff`), security scanning (`bandit`), and dependency auditing (`pip-audit`) on every push.
-- **Observability** in the generated service: structured logs, correlation IDs, Prometheus metrics, separate liveness/readiness checks.
+- **Observability in the generated service**: structured logs, correlation IDs, Prometheus metrics, separate liveness/readiness checks.
+- **Observability in the agent itself**: `agent_runs_total`, per-task duration histograms, LLM-fallback and patch-apply counters — `GET /metrics` on the review UI, structured JSON logs everywhere else. Not just the app it builds; see [docs/architecture.md#observability](docs/architecture.md#observability).
 
 Each of those is covered in depth in its own doc rather than crammed in here. Docs live next to what they describe: agent docs in `docs/`, docs about the generated app in `url_shortener/docs/`.
 

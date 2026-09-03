@@ -3,10 +3,11 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Response
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
 
+from .observability import CONTENT_TYPE_LATEST, metrics_text
 from .orchestrator import WorkflowOrchestrator
 
 
@@ -23,6 +24,18 @@ def create_review_app(output_directory: Path = Path("generated")) -> FastAPI:
     @app.get("/", response_class=HTMLResponse)
     def review_page() -> str:
         return REVIEW_PAGE
+
+    @app.get("/metrics")
+    def metrics() -> Response:
+        """Prometheus metrics for the agent's own operational health.
+
+        Cumulative for the lifetime of this process — the natural scrape point
+        when the agent is run as a shared service rather than a one-shot CLI
+        invocation (see docs/hosting-the-agent.md). Every run through the CLI
+        or this app's own /api/runs updates the same counters, since both
+        paths go through WorkflowOrchestrator.
+        """
+        return Response(metrics_text(), media_type=CONTENT_TYPE_LATEST)
 
     @app.get("/api/run")
     def latest_run() -> dict:
